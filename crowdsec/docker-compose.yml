@@ -1,0 +1,21 @@
+services:
+  crowdsec:
+    image: crowdsecurity/crowdsec:latest
+    container_name: crowdsec
+    environment:
+      GID: "${GID-1000}"
+      COLLECTIONS: "crowdsecurity/linux crowdsecurity/traefik crowdsecurity/appsec-virtual-patching crowdsecurity/appsec-generic-rules"
+    volumes:
+      - ./acquis.yaml:/etc/crowdsec/acquis.yaml
+      - ${APP_DATA}/CrowdSec/db:/var/lib/crowdsec/data/
+      - ${APP_DATA}/CrowdSec/config:/etc/crowdsec/
+      - ${APP_DATA}/Traefik/logs:/var/log/traefik/:ro
+    networks:
+      - traefik-proxy
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+networks:
+  traefik-proxy:
+    external: true

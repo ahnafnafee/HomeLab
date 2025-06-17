@@ -1,0 +1,32 @@
+services:
+  traefik:
+    image: traefik:v3.4.1
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - --configFile=/etc/traefik/traefik.yml
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - traefik-proxy
+    environment:
+      CF_API_EMAIL: ${CF_API_EMAIL}
+      CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN}
+      DOMAIN: ${DOMAIN}
+    stop_grace_period: 1s
+    ports:
+      - 80:80
+      - 443:443
+      - 8080:8080
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./rules:/rules
+      - ./config/traefik.yml:/etc/traefik/traefik.yml
+      - ${APP_DATA}/Traefik/logs:/var/log/traefik:rw
+      - ${APP_DATA}/Traefik/acme-certs:/cloudflare/letsencrypt/
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+networks:
+  traefik-proxy:
+    external: true

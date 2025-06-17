@@ -1,0 +1,128 @@
+#
+# WARNING: To install Immich, follow our guide: https://immich.app/docs/install/docker-compose
+#
+# Make sure to use the docker-compose.yml of the current release:
+#
+# https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
+#
+# The compose file on main may not be compatible with the latest release.
+
+name: immich
+
+services:
+  immich-server:
+    container_name: immich_server
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
+    # extends:
+    #   file: hwaccel.transcoding.yml
+    #   service: cpu # set to one of [nvenc, quicksync, rkmpp, vaapi, vaapi-wsl] for accelerated transcoding
+    volumes:
+      # Do not edit the next line. If you want to change the media storage location on your system, edit the value of UPLOAD_LOCATION in the .env file
+      - ${UPLOAD_LOCATION}:/usr/src/app/upload
+      - /etc/localtime:/etc/localtime:ro
+    env_file:
+      - .env
+    ports:
+      - '2283:2283'
+    expose:
+      - 2283
+    depends_on:
+      redis:
+        condition: service_started
+      database:
+        condition: service_healthy
+    restart: always
+    stop_grace_period: 1s
+    healthcheck:
+      disable: false
+    environment:
+      IMMICH_PORT: 2283
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-proxy" # VERY IMPORTANT: otherwise does not know which network to use for proxy
+      - 'traefik.http.routers.immich.rule=Host(`immich.${DOMAIN}`)' # will use the wildcard subdomain certificate
+      - "traefik.http.routers.immich.entrypoints=websecure"
+      - "traefik.http.services.immich.loadbalancer.server.scheme=http"
+      - "traefik.http.services.immich.loadbalancer.server.port=2283"
+      - "traefik.http.routers.immich.middlewares=chain-no-auth@file"
+      # - "traefik.http.routers.immich.middlewares=middlewares-authentik@file" #add this to any container you want to use the Authentik web proxy
+    networks:
+      - traefik-proxy
+      - immich-network
+
+  immich-machine-learning:
+    container_name: immich_machine_learning
+    hostname: immich-machine-learning
+    # For hardware acceleration, add one of -[armnn, cuda, rocm, openvino, rknn] to the image tag.
+    # Example tag: ${IMMICH_VERSION:-release}-cuda
+    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-release}-cuda
+    extends:
+      # uncomment this section for hardware acceleration - see https://immich.app/docs/features/ml-hardware-acceleration
+      file: hwaccel.ml.yml
+      service: cuda # set to one of [armnn, cuda, rocm, openvino, openvino-wsl, rknn] for accelerated inference - use the `-wsl` version for WSL2 where applicable
+    volumes:
+      - ${APP_DATA}/Immich/cache:/cache
+    env_file:
+      - .env
+    restart: always
+    environment:
+      IMMICH_PORT: 3003
+    healthcheck:
+      disable: false
+    networks:
+      - traefik-proxy
+      - immich-network
+
+  redis:
+    container_name: immich_redis
+    image: docker.io/valkey/valkey:8-bookworm@sha256:ff21bc0f8194dc9c105b769aeabf9585fea6a8ed649c0781caeac5cb3c247884
+    healthcheck:
+      test: redis-cli ping || exit 1
+    restart: always
+    networks:
+      - immich-network
+
+  database:
+    container_name: immich_postgres
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.3.0-pgvectors0.2.0@sha256:fa4f6e0971f454cd95fec5a9aaed2ed93d8f46725cc6bc61e0698e97dba96da1
+    env_file:
+      - .env
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_DB: ${DB_DATABASE_NAME}
+      POSTGRES_INITDB_ARGS: '--data-checksums'
+      # Uncomment the DB_STORAGE_TYPE: 'HDD' var if your database isn't stored on SSDs
+      # DB_STORAGE_TYPE: 'HDD'
+    volumes:
+      # Do not edit the next line. If you want to change the database storage location on your system, edit the value of DB_DATA_LOCATION in the .env file
+      - ${DB_DATA_LOCATION}:/var/lib/postgresql/data
+    stop_grace_period: 1s
+    restart: always
+    networks:
+      - immich-network
+
+  pgweb:
+    container_name: immich_pgweb
+    image: sosedoff/pgweb:latest
+    stop_grace_period: 1s
+    env_file:
+      - .env
+    ports:
+      - 30012:8081
+    environment:
+      PGWEB_DATABASE_URL: postgres://${DB_USERNAME}:${DB_PASSWORD}@database:5432/${DB_DATABASE_NAME}?sslmode=disable
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "nc", "-vz", "127.0.0.1", "8081"]
+      interval: 5s
+    restart: always
+    networks:
+      - immich-network
+
+networks:
+  immich-network:
+  traefik-proxy:
+    external: true

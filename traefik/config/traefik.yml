@@ -1,0 +1,152 @@
+# yaml-language-server: $schema=https://json.schemastore.org/traefik-v3.json
+
+################################################################
+# Global configuration - https://doc.traefik.io/traefik/reference/static-configuration/file/
+################################################################
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+################################################################
+# API and Dashboard
+################################################################
+api:
+  dashboard: true
+  debug: true
+  insecure: true
+
+################################################################
+# Let's Encrypt (ACME)
+################################################################
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: test@example.com # Replace with your email
+      storage: /cloudflare/letsencrypt/prod/acme.json
+      # storage: /cloudflare/letsencrypt/staging/acme.json
+      caServer: https://acme-v02.api.letsencrypt.org/directory # prod (default)
+      # caServer: https://acme-staging-v02.api.letsencrypt.org/directory # staging
+      dnsChallenge:
+        provider: cloudflare
+        delayBeforeCheck: 60s
+        resolvers:
+        - 1.1.1.1:53 # Cloudflare
+        - 8.8.8.8:53 # Google
+
+################################################################
+# Entrypoints - https://doc.traefik.io/traefik/routing/entrypoints/
+################################################################
+entryPoints:
+  dashboard:
+    address: ":9090"
+
+  web:
+    address: ":80"
+    transport:
+      respondingTimeouts:
+        readTimeout: "0s"
+        idleTimeout: "600s"
+        writeTimeout: "600s"
+    http:
+      middlewares:
+      - crowdsec@file
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+
+  websecure:
+    address: ":443"
+    transport:
+      respondingTimeouts:
+        readTimeout: 600s
+        idleTimeout: 600s
+        writeTimeout: 600s
+    http:
+      middlewares:
+      - crowdsec@file
+      tls:
+        # options: tls-opts@file
+        certResolver: letsencrypt
+        domains:
+        - main: "example.com" # Replace with your domain
+          sans:
+          - "*.example.com" # Replace with your domai
+    forwardedHeaders:
+      trustedIPs:
+      # Cloudflare (https://www.cloudflare.com/ips-v4)
+      - 103.21.244.0/22
+      - 103.22.200.0/22
+      - 103.31.4.0/22
+      - 104.16.0.0/13
+      - 104.24.0.0/14
+      - 108.162.192.0/18
+      - 131.0.72.0/22
+      - 141.101.64.0/18
+      - 162.158.0.0/15
+      - 172.64.0.0/13
+      - 173.245.48.0/20
+      - 188.114.96.0/20
+      - 190.93.240.0/20
+      - 197.234.240.0/22
+      - 198.41.128.0/17
+      - 2400:cb00::/32
+      - 2606:4700::/32
+      - 2803:f800::/32
+      - 2405:b500::/32
+      - 2405:8100::/32
+      - 2a06:98c0::/29
+      - 2c0f:f248::/32
+      # Local IPs
+      - 127.0.0.1/32
+      - 10.0.0.0/8
+      - 192.168.0.0/16
+      - 172.16.0.0/12
+
+serversTransport:
+  insecureSkipVerify: true
+
+################################################################
+# Logs - https://doc.traefik.io/traefik/observability/logs/
+################################################################
+log:
+  level: DEBUG # Options: DEBUG, PANIC, FATAL, ERROR (Default), WARN, and INFO
+  filePath: "/var/log/traefik/traefik.log"
+  maxBackups: 3
+  maxSize: 200
+
+################################################################
+# Access logs - https://doc.traefik.io/traefik/observability/access-logs/
+################################################################
+accessLog:
+  filePath: "/var/log/traefik/access.log"
+  bufferingSize: 100
+  filters:
+    statusCodes:
+    - 204-299
+    - 400-499
+    - 500-599
+
+################################################################
+# Providers - https://doc.traefik.io/traefik/providers/docker/
+################################################################
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: traefik-proxy
+
+  # Enable auto loading of newly created rules by watching a directory
+  file:
+    # Apps, LoadBalancers, TLS Options, Middlewares, Middleware Chains
+    directory: /rules
+    watch: true
+
+################################################################
+# Plugins - https://doc.traefik.io/traefik/plugins/
+################################################################
+experimental:
+  plugins:
+    bouncer:
+      moduleName: "github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin"
+      version: "v1.4.2"

@@ -1,0 +1,27 @@
+http:
+  middlewares:
+    crowdsec:
+      plugin:
+        bouncer:
+          enabled: true
+          logLevel: INFO
+          updateIntervalSeconds: 15
+          updateMaxFailure: 0
+          defaultDecisionSeconds: 15
+          httpTimeoutSeconds: 10
+          crowdsecMode: stream
+          crowdsecAppsecEnabled: true
+          crowdsecAppsecHost: crowdsec:7422
+          crowdsecAppsecFailureBlock: true
+          crowdsecAppsecUnreachableBlock: true
+          crowdsecLapiKey: # Replace CrowdSec API key (docker exec crowdsec cscli bouncers add crowdsecBouncer)
+          crowdsecLapiHost: crowdsec:8080
+          crowdsecLapiScheme: http
+          forwardedHeadersTrustedIPs:
+          - 10.0.0.0/8
+          - 172.16.0.0/12
+          - 192.168.0.0/16
+          clientTrustedIPs:
+          - 10.0.0.0/8
+          - 172.16.0.0/12
+          - 192.168.0.0/16
