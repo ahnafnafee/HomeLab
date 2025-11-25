@@ -37,7 +37,7 @@ certificatesResolvers:
 # Entrypoints - https://doc.traefik.io/traefik/routing/entrypoints/
 ################################################################
 entryPoints:
-  dashboard:
+  traefik:
     address: ":9090"
 
   web:
